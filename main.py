@@ -8,6 +8,8 @@ import pickle
 import soundfile as sf
 from pydub import AudioSegment
 import os
+import pygame
+import tempfile
 
 class VoiceChangerApp:
     def __init__(self, master):
@@ -88,6 +90,9 @@ class VoiceChangerApp:
         # Bind closing window event
         master.protocol("WM_DELETE_WINDOW", self.close_window)
 
+        # Initialize pygame mixer
+        pygame.mixer.init()
+
     # Callback function for effect selection
     def change_effect(self, selected_effect):
         if selected_effect == "Robot":
@@ -119,8 +124,12 @@ class VoiceChangerApp:
 
     # Play custom sound
     def play_custom_sound(self, idx):
-        if self.custom_sounds[idx] is not None:
-            self.stream.write(self.custom_sounds[idx].tobytes())
+        try:
+            sound_data = self.custom_sounds[idx]
+            if sound_data is not None:
+                pygame.mixer.Sound(sound_data).play()
+        except Exception as e:
+            print(f"Error playing custom sound {idx}: {e}")
 
     # Audio processing loop
     def process_audio(self):
@@ -177,14 +186,16 @@ class VoiceChangerApp:
                 if file_path.endswith('.wav'):
                     data, rate = sf.read(file_path)
                 else:  # Assume MP3
-                    sound = AudioSegment.from_mp3(file_path)
-                    data = np.array(sound.get_array_of_samples())
-                    rate = sound.frame_rate
+                    temp_wav_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+                    sound = AudioSegment.from_file(file_path)
+                    sound.export(temp_wav_file.name, format="wav")
+                    data, rate = sf.read(temp_wav_file.name)
+                    os.unlink(temp_wav_file.name)  # Clean up temporary WAV file
                 if rate != self.RATE:
                     data = resample(data, int(len(data) * self.RATE / rate))
                 self.custom_sounds[idx] = data.astype(np.int16)
             except Exception as e:
-                print("Error loading custom sound:", e)
+                print(f"Error loading custom sound from '{file_path}': {e}")
 
     # Load custom sounds from file
     def load_custom_sounds(self):
